@@ -107,7 +107,18 @@ const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage,
 
     return (
       <div className="space-y-3" key={settingKey}>
-        <label className="text-sm font-bold text-gray-700 block">{label}</label>
+        <div className="flex justify-between items-center">
+          <label className="text-sm font-bold text-gray-700 block">{label}</label>
+          {currentVal && (
+            <button 
+              type="button" 
+              onClick={() => setDisplayForm(prev => ({ ...prev, [settingKey]: '' }))}
+              className="text-[10px] sm:text-xs text-red-500 hover:text-red-700 font-bold bg-red-50 hover:bg-red-100 px-2 py-1.5 rounded-lg transition flex items-center"
+            >
+              <X size={12} className="mr-1" /> {isLogo ? 'Reset ke Default' : 'Hapus Gambar'}
+            </button>
+          )}
+        </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <div className={`${isLogo ? 'w-16 h-16 rounded-2xl' : 'w-24 h-16 rounded-xl'} border border-gray-200 overflow-hidden bg-gray-50 flex-shrink-0 relative group flex items-center justify-center`}>
             {currentVal ? <img src={currentVal} alt="preview" className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/600x400/fee2e2/ef4444?text=URL+Rusak'; }} /> : <div className="text-gray-400"><ImageIcon size={isLogo ? 24 : 20}/></div>}
