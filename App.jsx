@@ -829,6 +829,13 @@ export default function App() {
             <div className="flex mb-6 bg-gray-50 p-1.5 rounded-2xl border border-gray-100"><button onClick={() => {setLoginRole('tenant'); setLoginError('');}} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition ${loginRole === 'tenant' ? 'bg-white text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Penyewa</button><button onClick={() => {setLoginRole('owner'); setLoginError('');}} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition ${loginRole === 'owner' ? 'bg-white text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Pengelola</button></div>
             <form onSubmit={handleLogin} className="space-y-4">
               {loginError && <p className="text-red-600 text-xs sm:text-sm bg-red-50 p-3 rounded-xl text-center font-bold border border-red-100 animate-in slide-in-from-top-2">{loginError}</p>}
+              
+              {loginRole === 'owner' && (
+                <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-center animate-in fade-in duration-300">
+                  <p className="text-xs text-indigo-700 font-medium">Ini adalah demo aplikasi.<br/>Masukkan User: <strong>admin</strong> dan Password: <strong>admin123</strong></p>
+                </div>
+              )}
+
               {loginRole === 'tenant' && (<div><label className="text-sm font-bold text-gray-700 block mb-2">Pilih Area Kos</label><select value={loginPropertyId} onChange={(e) => setLoginPropertyId(e.target.value)} required className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 bg-white"><option value="">-- Pilih Area --</option>{properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>)}
               <div><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Nama Lengkap Penyewa' : 'Username Admin'}</label><input type="text" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: Budi Santoso' : 'Masukkan username...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500"/></div>
               <div><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Kata Sandi (Nomor Kamar)' : 'Kata Sandi'}</label><input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: 101' : 'Masukkan kata sandi...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500"/></div>
@@ -844,7 +851,7 @@ export default function App() {
         {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 z-40 md:hidden backdrop-blur-sm transition-opacity" onClick={() => setIsSidebarOpen(false)} />}
         <aside className={`fixed md:sticky top-0 left-0 h-[100dvh] w-64 bg-white border-r border-gray-100/80 flex flex-col z-50 transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
           <div className="p-4 sm:p-6 flex items-center justify-between border-b border-gray-50/80 mb-2">
-            <div className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition" onClick={() => setShowLandingPage(true)}>
+            <div className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition" onClick={() => { setCurrentView('dashboard'); if (window.innerWidth < 768) setIsSidebarOpen(false); }}>
               {siteSettings.appLogo ? <img src={siteSettings.appLogo} className="w-8 h-8 rounded-lg object-cover shadow-md shadow-indigo-200/50 border border-gray-100" /> : <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-200/50"><Home size={16} className="text-white" /></div>}
               <span className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 truncate">{siteSettings.appName || 'Kosanku'}</span>
             </div>
