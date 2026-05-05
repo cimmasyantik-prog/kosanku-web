@@ -101,16 +101,16 @@ const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage,
     reader.readAsDataURL(file);
   };
 
-  const ImageUploadField = ({ label, settingKey, isLogo = false }) => {
+  const renderImageUploadField = (label, settingKey, isLogo = false) => {
     const currentVal = displayForm[settingKey] || '';
     const isBase64 = currentVal.startsWith('data:image/');
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-3" key={settingKey}>
         <label className="text-sm font-bold text-gray-700 block">{label}</label>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <div className={`${isLogo ? 'w-16 h-16 rounded-2xl' : 'w-24 h-16 rounded-xl'} border border-gray-200 overflow-hidden bg-gray-50 flex-shrink-0 relative group flex items-center justify-center`}>
-            {currentVal ? <img src={currentVal} alt="preview" className="w-full h-full object-cover" /> : <div className="text-gray-400"><ImageIcon size={isLogo ? 24 : 20}/></div>}
+            {currentVal ? <img src={currentVal} alt="preview" className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/600x400/fee2e2/ef4444?text=URL+Rusak'; }} /> : <div className="text-gray-400"><ImageIcon size={isLogo ? 24 : 20}/></div>}
           </div>
           <div className="flex-1 w-full space-y-2">
             <div className="flex gap-2 w-full">
@@ -157,16 +157,23 @@ const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage,
             <h3 className="text-sm font-bold text-indigo-600 mb-4 uppercase tracking-wider border-b border-gray-100 pb-2">Identitas Utama</h3>
             <div className="space-y-6">
               <div><label className="text-sm font-bold text-gray-700 block mb-2">Nama Aplikasi</label><input type="text" value={displayForm.appName || ''} onChange={(e) => setDisplayForm({...displayForm, appName: e.target.value})} placeholder="Kosanku" className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500" /></div>
-              <ImageUploadField label="Logo Aplikasi" settingKey="appLogo" isLogo={true} />
+              {renderImageUploadField("Logo Aplikasi", "appLogo", true)}
             </div>
           </div>
           <div className="border-t border-gray-100 pt-6">
             <h3 className="text-sm font-bold text-indigo-600 mb-4 uppercase tracking-wider border-b border-gray-100 pb-2">Foto Banner & Peta Lokasi</h3>
-            <div className="space-y-6"><ImageUploadField label="Foto Utama (Banner Atas)" settingKey="heroImg" /><ImageUploadField label="Foto Peta Lokasi (Bawah)" settingKey="mapImg" /></div>
+            <div className="space-y-6">
+              {renderImageUploadField("Foto Utama (Banner Atas)", "heroImg")}
+              {renderImageUploadField("Foto Peta Lokasi (Bawah)", "mapImg")}
+            </div>
           </div>
           <div className="border-t border-gray-100 pt-6">
             <h3 className="text-sm font-bold text-indigo-600 mb-4 uppercase tracking-wider border-b border-gray-100 pb-2">Foto Galeri Kos</h3>
-            <div className="space-y-6"><ImageUploadField label="Foto Galeri 1" settingKey="gallery1" /><ImageUploadField label="Foto Galeri 2" settingKey="gallery2" /><ImageUploadField label="Foto Galeri 3" settingKey="gallery3" /></div>
+            <div className="space-y-6">
+              {renderImageUploadField("Foto Galeri 1", "gallery1")}
+              {renderImageUploadField("Foto Galeri 2", "gallery2")}
+              {renderImageUploadField("Foto Galeri 3", "gallery3")}
+            </div>
           </div>
           <div className="border-t border-gray-100 pt-6">
             <h3 className="text-sm font-bold text-indigo-600 mb-3 uppercase tracking-wider">Teks Fasilitas Unggulan</h3>
@@ -726,7 +733,7 @@ export default function App() {
                 </div>
               </div>
               <div className="lg:w-1/2 relative w-full h-[320px] sm:h-[400px] md:h-[500px] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white">
-                <img src={siteSettings.heroImg} alt="Kamar Kos Modern" className="w-full h-full object-cover" />
+                <img src={siteSettings.heroImg || 'https://placehold.co/1000x800/e2e8f0/94a3b8?text=Kosong'} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/1000x800/fee2e2/ef4444?text=URL+Rusak'; }} alt="Kamar Kos Modern" className="w-full h-full object-cover" />
                 <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-6 bg-white/90 backdrop-blur-md p-3 sm:p-4 rounded-2xl shadow-xl flex items-center space-x-3 sm:space-x-4 border border-white/50">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-xl flex items-center justify-center text-green-600"><CheckCircle2 size={24} /></div>
                   <div><p className="text-xs sm:text-sm font-extrabold text-gray-800">Kamar Siap Huni</p><p className="text-[10px] sm:text-xs text-gray-500 font-medium">Harga Terbaik</p></div>
@@ -747,9 +754,9 @@ export default function App() {
           <section id="galeri" className="py-16 sm:py-24 bg-gray-50 border-t border-gray-100"><div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="mb-10 text-center sm:text-left"><h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Galeri Kos</h2><p className="text-gray-500 mt-2 text-sm sm:text-base font-medium">Intip suasana nyaman di lingkungan kami.</p></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-              <div className="h-48 sm:h-64 bg-gray-200 rounded-3xl overflow-hidden border-4 border-white shadow-lg group cursor-pointer"><img src={siteSettings.gallery1} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /></div>
-              <div className="h-48 sm:h-64 bg-gray-200 rounded-3xl overflow-hidden border-4 border-white shadow-lg group cursor-pointer"><img src={siteSettings.gallery2} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /></div>
-              <div className="h-48 sm:h-64 bg-gray-200 rounded-3xl overflow-hidden border-4 border-white shadow-lg group cursor-pointer sm:col-span-2 md:col-span-1"><img src={siteSettings.gallery3} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /></div>
+              <div className="h-48 sm:h-64 bg-gray-200 rounded-3xl overflow-hidden border-4 border-white shadow-lg group cursor-pointer"><img src={siteSettings.gallery1 || 'https://placehold.co/800x600/e2e8f0/94a3b8?text=Kosong'} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/800x600/fee2e2/ef4444?text=URL+Rusak'; }} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /></div>
+              <div className="h-48 sm:h-64 bg-gray-200 rounded-3xl overflow-hidden border-4 border-white shadow-lg group cursor-pointer"><img src={siteSettings.gallery2 || 'https://placehold.co/800x600/e2e8f0/94a3b8?text=Kosong'} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/800x600/fee2e2/ef4444?text=URL+Rusak'; }} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /></div>
+              <div className="h-48 sm:h-64 bg-gray-200 rounded-3xl overflow-hidden border-4 border-white shadow-lg group cursor-pointer sm:col-span-2 md:col-span-1"><img src={siteSettings.gallery3 || 'https://placehold.co/800x600/e2e8f0/94a3b8?text=Kosong'} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/800x600/fee2e2/ef4444?text=URL+Rusak'; }} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /></div>
             </div>
           </div></section>
 
@@ -757,7 +764,7 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 sm:gap-12 mb-12">
               <div><div className="flex items-center space-x-3 mb-6 cursor-pointer" onClick={(e) => scrollToSection(e, 'beranda')}>{siteSettings.appLogo ? <img src={siteSettings.appLogo} className="w-10 h-10 rounded-xl object-cover bg-white shadow-md" /> : <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shadow-md"><Home size={22}/></div>}<span className="text-2xl font-extrabold">{siteSettings.appName || 'Kosanku'}</span></div><p className="text-slate-400 text-sm font-medium leading-relaxed">Solusi hunian pintar yang mengutamakan kenyamanan, keamanan, dan kebersihan. Jadikan hari-harimu lebih produktif bersama kami.</p></div>
               <div><h4 className="text-lg font-bold mb-6 text-white">Kontak Kami</h4><ul className="space-y-4 text-slate-400 text-sm font-medium"><li className="flex items-start"><MapPin size={18} className="mr-3 text-indigo-400 flex-shrink-0" /> Tersedia di beberapa area strategis</li><li className="flex items-start"><Phone size={18} className="mr-3 text-indigo-400 flex-shrink-0" /> 0853-4150-3151 (WhatsApp)</li></ul></div>
-              <div><h4 className="text-lg font-bold mb-6 text-white">Peta Lokasi</h4><div className="w-full h-40 bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 relative group cursor-pointer shadow-inner"><img src={siteSettings.mapImg} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity duration-300" /><div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="bg-slate-900/80 px-4 py-2 rounded-xl text-white text-xs font-bold backdrop-blur-md shadow-lg border border-slate-700">Lihat Peta</span></div></div></div>
+              <div><h4 className="text-lg font-bold mb-6 text-white">Peta Lokasi</h4><div className="w-full h-40 bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 relative group cursor-pointer shadow-inner"><img src={siteSettings.mapImg || 'https://placehold.co/800x600/334155/94a3b8?text=Peta+Kosong'} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/800x600/fee2e2/ef4444?text=URL+Rusak'; }} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity duration-300" /><div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="bg-slate-900/80 px-4 py-2 rounded-xl text-white text-xs font-bold backdrop-blur-md shadow-lg border border-slate-700">Lihat Peta</span></div></div></div>
             </div>
             <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center sm:text-left"><p className="text-slate-500 text-xs sm:text-sm font-medium">© 2026 {siteSettings.appName || 'Kosanku'}. Hak Cipta Dilindungi.</p><button onClick={() => setShowLandingPage(false)} className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl text-indigo-400 hover:text-white transition flex items-center text-xs sm:text-sm font-bold">Portal Pengelola / Penghuni <ArrowRight size={14} className="ml-1.5" /></button></div>
           </div></footer>
