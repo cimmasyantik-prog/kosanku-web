@@ -423,7 +423,43 @@ export default function App() {
     }
   };
 
-  useEffect(() => { fetchGoogleSheetsData(true); }, []);
+
+  // --- LOGIKA LOADING INSTAN (CACHE TERINTEGRASI DI SINI) ---
+  useEffect(() => {
+    const cachedData = localStorage.getItem('kosanku_db_cache');
+    let hasCache = false;
+
+    if (cachedData) {
+      try {
+        const data = JSON.parse(cachedData);
+        if (data.properties && data.properties.length > 0) {
+          setProperties(data.properties || []);
+          setAllRooms(data.rooms || []);
+          setAllTenants(data.tenants || []);
+          setAllTransactions(data.transactions || []);
+          setAllAdmins(data.admins || [{ username: 'admin', password: 'admin123' }]);
+          
+          if (data.settings) {
+            const sm = { ...DEFAULT_SETTINGS };
+            data.settings.forEach(s => { if (s.key && s.value) sm[s.key] = s.value; });
+            setSiteSettings(sm);
+          }
+          
+          setSelectedPropertyId(data.properties[0].id);
+          setLoginPropertyId(data.properties[0].id);
+          
+          setIsLoadingData(false); 
+          hasCache = true;
+        }
+      } catch (e) {
+        console.warn("Cache rusak, abaikan.");
+      }
+    }
+
+    fetchGoogleSheetsData(!hasCache); 
+  }, []);
+  // ------------------------------------------------------------
+
 
   const sendDataToSheets = async (action, payload) => {
     setIsSaving(true);
