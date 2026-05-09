@@ -4,7 +4,7 @@ import {
   MoreVertical, CheckCircle2, XCircle, AlertCircle, Menu, X, Phone, 
   Calendar, MapPin, ChevronDown, Download, MessageCircle, Upload, Clock, 
   Building, LogOut, AlertTriangle, User, Trash2, Printer, Edit, FileText, 
-  Wifi, ShieldCheck, Car, Star, ArrowRight, ArrowLeft, Loader2, RefreshCw, Info, Image as ImageIcon, WifiOff, Smartphone
+  Wifi, ShieldCheck, Car, Star, ArrowRight, ArrowLeft, Loader2, RefreshCw, Info, Image as ImageIcon, WifiOff, Smartphone, Eye, EyeOff
 } from 'lucide-react';
 
 // --- HELPER FORMATTER ---
@@ -17,6 +17,26 @@ const setupPWA = () => {
   
   // 1. Injeksi Web Manifest
   if (!document.querySelector('link[rel="manifest"]')) {
+    
+    // Bikin Icon Dinamis dengan Latar Belakang Solid agar tidak Hitam di HP
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    
+    // Latar belakang Indigo solid
+    ctx.fillStyle = '#4f46e5'; 
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Teks Logo "K" berwarna putih di tengah
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 300px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('K', 256, 280); // Offset Y sedikit ke bawah agar pas
+
+    const iconDataUrl = canvas.toDataURL('image/png');
+
     const manifest = {
       name: "Kosanku Super App",
       short_name: "Kosanku",
@@ -25,7 +45,14 @@ const setupPWA = () => {
       display: "standalone",
       background_color: "#f8fafc",
       theme_color: "#4f46e5",
-      icons: [{ src: "https://cdn-icons-png.flaticon.com/512/25/25694.png", sizes: "512x512", type: "image/png" }]
+      icons: [
+        { 
+          src: iconDataUrl, 
+          sizes: "512x512", 
+          type: "image/png",
+          purpose: "any maskable" // Penting: Agar Android memotong icon dengan rapi (bulat/kotak)
+        }
+      ]
     };
     const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
     const link = document.createElement('link');
@@ -104,10 +131,13 @@ const SidebarItem = ({ icon: Icon, label, viewId, currentView, setCurrentView, s
   </button>
 );
 
-const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage, setAllAdmins, setSiteSettings }) => {
+const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage, setAllAdmins, setSiteSettings, checkDemoLimit }) => {
   const currentAdmin = allAdmins[0] || { username: 'admin', password: 'admin123' };
   const [formData, setFormData] = useState({ username: currentAdmin.username, currentPassword: '', newPassword: '', confirmPassword: '' });
   const [displayForm, setDisplayForm] = useState(siteSettings);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     setDisplayForm(siteSettings);
@@ -115,6 +145,7 @@ const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage,
 
   const handleSaveSettings = (e) => {
     e.preventDefault();
+    if (checkDemoLimit && checkDemoLimit('settings')) return;
     if (formData.currentPassword !== currentAdmin.password) return showMessage('Gagal', 'Kata sandi saat ini salah!', 'error');
     if (formData.newPassword && formData.newPassword !== formData.confirmPassword) return showMessage('Gagal', 'Kata sandi baru dan konfirmasi tidak cocok!', 'error');
     
@@ -126,6 +157,7 @@ const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage,
 
   const handleSaveDisplay = (e) => {
     e.preventDefault();
+    if (checkDemoLimit && checkDemoLimit('settings')) return;
     setSiteSettings(displayForm);
     const payloadArray = Object.keys(displayForm).map(k => ({ key: k, value: displayForm[k] }));
     sendDataToSheets('saveSettings', payloadArray);
@@ -205,10 +237,28 @@ const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage,
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100/60 p-6 sm:p-8">
         <form onSubmit={handleSaveSettings} className="space-y-5">
           <div><label className="text-sm font-bold text-gray-700 block mb-2">Username Admin</label><input type="text" required value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500"/></div>
-          <div className="border-t border-gray-100 pt-6 mt-6"><label className="text-sm font-bold text-gray-700 block mb-2">Kata Sandi Saat Ini <span className="text-red-500">*</span></label><input type="password" required value={formData.currentPassword} onChange={(e) => setFormData({...formData, currentPassword: e.target.value})} placeholder="Sandi saat ini..." className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500 mb-2"/></div>
+          <div className="border-t border-gray-100 pt-6 mt-6">
+            <label className="text-sm font-bold text-gray-700 block mb-2">Kata Sandi Saat Ini <span className="text-red-500">*</span></label>
+            <div className="relative mb-2">
+              <input type={showCurrentPassword ? "text" : "password"} required value={formData.currentPassword} onChange={(e) => setFormData({...formData, currentPassword: e.target.value})} placeholder="Sandi saat ini..." className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 pr-12 text-sm focus:outline-none focus:border-indigo-500"/>
+              <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600 transition-colors">{showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div><label className="text-sm font-bold text-gray-700 block mb-2">Sandi Baru</label><input type="password" value={formData.newPassword} onChange={(e) => setFormData({...formData, newPassword: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500"/></div>
-            <div><label className="text-sm font-bold text-gray-700 block mb-2">Konfirmasi</label><input type="password" value={formData.confirmPassword} onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-indigo-500"/></div>
+            <div>
+              <label className="text-sm font-bold text-gray-700 block mb-2">Sandi Baru</label>
+              <div className="relative">
+                <input type={showNewPassword ? "text" : "password"} value={formData.newPassword} onChange={(e) => setFormData({...formData, newPassword: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 pr-12 text-sm focus:outline-none focus:border-indigo-500"/>
+                <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600 transition-colors">{showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-bold text-gray-700 block mb-2">Konfirmasi</label>
+              <div className="relative">
+                <input type={showConfirmPassword ? "text" : "password"} value={formData.confirmPassword} onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 pr-12 text-sm focus:outline-none focus:border-indigo-500"/>
+                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600 transition-colors">{showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+              </div>
+            </div>
           </div>
           <div className="pt-6 flex justify-end"><button type="submit" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-2xl text-sm font-bold shadow-md shadow-indigo-200/50">Simpan Perubahan</button></div>
         </form>
@@ -317,6 +367,7 @@ export default function App() {
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
   const [broadcastText, setBroadcastText] = useState('');
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // PWA & Network States
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -405,6 +456,27 @@ export default function App() {
 
   const showMessage = (title, message, type = 'info') => {
     setMessageBox({ isOpen: true, title, message, type });
+  };
+
+  // --- PEMBATASAN VERSI DEMO ---
+  const checkDemoLimit = (actionType) => {
+    if (actionType === 'property') {
+      showMessage('Versi Demo Terbatas', 'Fitur tambah area (properti) baru dinonaktifkan pada versi demo ini.', 'warning');
+      return true;
+    }
+    if (actionType === 'room' && allRooms.length >= 2) {
+      showMessage('Batas Versi Demo', 'Anda hanya dapat menambahkan maksimal 2 unit kamar pada versi demo.', 'warning');
+      return true;
+    }
+    if (actionType === 'tenant' && allTenants.length >= 3) {
+      showMessage('Batas Versi Demo', 'Anda hanya dapat mendaftarkan maksimal 3 penghuni pada versi demo.', 'warning');
+      return true;
+    }
+    if (actionType === 'settings') {
+      showMessage('Versi Demo Terbatas', 'Fitur perubahan pengaturan akun dan tampilan web dinonaktifkan pada versi demo ini agar tidak mengganggu pengguna lain.', 'warning');
+      return true;
+    }
+    return false;
   };
 
   const addNotification = (type, title, message) => {
@@ -928,7 +1000,15 @@ export default function App() {
 
               {loginRole === 'tenant' && (<div className="animate-in fade-in duration-300"><label className="text-sm font-bold text-gray-700 block mb-2">Pilih Area Kos</label><select value={loginPropertyId} onChange={(e) => setLoginPropertyId(e.target.value)} required className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all bg-white"><option value="">-- Pilih Area --</option>{properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>)}
               <div className="animate-in fade-in duration-500"><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Nama Lengkap Penyewa' : 'Username Admin'}</label><input type="text" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: Budi Santoso' : 'Masukkan username...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"/></div>
-              <div className="animate-in fade-in duration-700"><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Kata Sandi (Nomor Kamar)' : 'Kata Sandi'}</label><input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: 101' : 'Masukkan kata sandi...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"/></div>
+              <div className="animate-in fade-in duration-700">
+                <label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Kata Sandi (Nomor Kamar)' : 'Kata Sandi'}</label>
+                <div className="relative">
+                  <input type={showPassword ? "text" : "password"} value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: 101' : 'Masukkan kata sandi...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 pr-12 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"/>
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600 transition-colors">
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+              </div>
               <button type="submit" className="w-full bg-indigo-600 text-white hover:bg-indigo-700 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200/50 hover:-translate-y-1 active:scale-95 transition-all duration-300 mt-4">Masuk Sekarang</button>
             </form>
           </div>
@@ -957,7 +1037,7 @@ export default function App() {
                   </select>
                   <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none pb-2" />
                 </div>
-                <button onClick={()=>setIsAddPropertyModalOpen(true)} className="w-full bg-white border border-green-200 text-green-600 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm hover:bg-green-50 transition flex items-center justify-center space-x-2"><Plus size={14}/> <span>Tambah Area</span></button>
+                <button onClick={() => checkDemoLimit('property') ? null : setIsAddPropertyModalOpen(true)} className="w-full bg-white border border-green-200 text-green-600 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm hover:bg-green-50 transition flex items-center justify-center space-x-2"><Plus size={14}/> <span>Tambah Area</span></button>
               </div>
               <div className="pt-3 border-t border-gray-100">
                 <label className="text-[10px] font-bold text-gray-400 mb-2 flex items-center uppercase tracking-wider"><WalletCards size={12} className="mr-1"/> Semua Area</label>
@@ -1187,7 +1267,7 @@ export default function App() {
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Unit Kamar</h2><p className="text-xs sm:text-sm text-gray-500 flex items-center mt-1"><MapPin size={14} className="mr-1 opacity-70"/> {selectedPropertyDetails?.address}</p></div>
-                  <div className="flex w-full sm:w-auto gap-2"><button onClick={openEditPropertyModal} className="flex-1 sm:flex-none bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-2xl text-sm font-bold hover:bg-gray-50 transition flex items-center justify-center space-x-2"><Settings size={16} /> <span className="hidden sm:inline">Edit Area</span></button><button onClick={()=>setIsAddRoomModalOpen(true)} className="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2.5 rounded-2xl text-sm font-bold hover:bg-indigo-700 transition flex items-center justify-center space-x-2 shadow-md shadow-indigo-200/50"><Plus size={18} /> <span>Tambah Unit</span></button></div>
+                  <div className="flex w-full sm:w-auto gap-2"><button onClick={openEditPropertyModal} className="flex-1 sm:flex-none bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-2xl text-sm font-bold hover:bg-gray-50 transition flex items-center justify-center space-x-2"><Settings size={16} /> <span className="hidden sm:inline">Edit Area</span></button><button onClick={() => checkDemoLimit('room') ? null : setIsAddRoomModalOpen(true)} className="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2.5 rounded-2xl text-sm font-bold hover:bg-indigo-700 transition flex items-center justify-center space-x-2 shadow-md shadow-indigo-200/50"><Plus size={18} /> <span>Tambah Unit</span></button></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">{rooms.map(room => {
                   const tenant = tenants.find(t => String(t.id) === String(room.tenantId));
@@ -1197,11 +1277,11 @@ export default function App() {
             )}
             {isOwner && currentView === 'tenants' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Daftar Penghuni</h2><div className="flex w-full sm:w-auto space-x-2"><div className="relative flex-1 sm:w-64"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 transition-all" size={18} /><input type="text" value={tenantSearch} onChange={(e) => setTenantSearch(e.target.value)} placeholder="Cari penghuni..." className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-2xl text-base sm:text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all bg-white" /></div><button onClick={()=>setIsAddTenantModalOpen(true)} className="text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 px-4 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center shadow-md"><Plus size={18} /> <span className="hidden sm:inline ml-2">Tambah</span></button></div></div>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Daftar Penghuni</h2><div className="flex w-full sm:w-auto space-x-2"><div className="relative flex-1 sm:w-64"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 transition-all" size={18} /><input type="text" value={tenantSearch} onChange={(e) => setTenantSearch(e.target.value)} placeholder="Cari penghuni..." className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-2xl text-base sm:text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all bg-white" /></div><button onClick={() => checkDemoLimit('tenant') ? null : setIsAddTenantModalOpen(true)} className="text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 px-4 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center shadow-md"><Plus size={18} /> <span className="hidden sm:inline ml-2">Tambah</span></button></div></div>
                 <div className="bg-white rounded-3xl shadow-sm border border-gray-100/60 overflow-hidden"><div className="overflow-x-auto hide-scroll-mobile custom-scrollbar"><table className="w-full text-left border-collapse"><thead className="bg-gray-50/50"><tr className="border-b border-gray-100"><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Nama Penghuni</th><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Unit</th><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Kontak</th><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase text-right whitespace-nowrap">Aksi</th></tr></thead><tbody className="divide-y divide-gray-50">{tenants.filter(t => String(t.name).toLowerCase().includes(String(tenantSearch).toLowerCase())).map(tenant => {const room = rooms.find(r => String(r.id) === String(tenant.roomId)); return (<tr key={tenant.id} className="hover:bg-gray-50/30 transition"><td className="p-4 sm:p-5 whitespace-nowrap"><div className="flex items-center space-x-3"><div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-100 to-purple-100 text-indigo-600 flex items-center justify-center font-bold">{String(tenant.name).charAt(0)}</div><div><p className="text-sm font-bold text-gray-800">{tenant.name}</p><p className="text-xs text-gray-400 mt-0.5">ID: KSN-{tenant.id}</p></div></div></td><td className="p-4 sm:p-5 whitespace-nowrap"><span className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 text-gray-700">{room ? `Unit ${room.number}` : '-'}</span></td><td className="p-4 sm:p-5 whitespace-nowrap"><div className="flex flex-col space-y-1.5"><span className="text-sm text-gray-700 flex items-center font-medium"><Phone size={14} className="mr-2 text-gray-400"/> {tenant.phone}</span><span className="text-xs text-red-500 flex items-center font-medium"><AlertCircle size={14} className="mr-2"/> Darurat: {tenant.emergencyContact}</span></div></td><td className="p-4 sm:p-5 text-right whitespace-nowrap"><button onClick={()=>handleCheckoutTenant(tenant.id, tenant.roomId, tenant.name)} className="text-red-600 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100 text-xs font-bold transition border border-red-100">Keluarkan</button></td></tr>)})}</tbody></table></div></div>
               </div>
             )}
-            {isOwner && currentView === 'settings' && <AdminSettings allAdmins={allAdmins} siteSettings={siteSettings} sendDataToSheets={sendDataToSheets} showMessage={showMessage} setAllAdmins={setAllAdmins} setSiteSettings={setSiteSettings} />}
+            {isOwner && currentView === 'settings' && <AdminSettings allAdmins={allAdmins} siteSettings={siteSettings} sendDataToSheets={sendDataToSheets} showMessage={showMessage} setAllAdmins={setAllAdmins} setSiteSettings={setSiteSettings} checkDemoLimit={checkDemoLimit} />}
           </div>
         </main>
       </div>
