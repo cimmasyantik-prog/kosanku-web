@@ -484,8 +484,8 @@ export default function App() {
       showMessage('Versi Demo Terbatas', 'Fitur tambah area (properti) baru dinonaktifkan pada versi demo ini.', 'warning');
       return true;
     }
-    if (actionType === 'room' && allRooms.length >= 2) {
-      showMessage('Batas Versi Demo', 'Anda hanya dapat menambahkan maksimal 2 unit kamar pada versi demo.', 'warning');
+    if (actionType === 'room' && allRooms.length >= 4) {
+      showMessage('Batas Versi Demo', 'Anda hanya dapat menambahkan maksimal 4 unit kamar pada versi demo.', 'warning');
       return true;
     }
     if (actionType === 'tenant' && allTenants.length >= 3) {
