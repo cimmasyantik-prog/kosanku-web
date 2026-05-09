@@ -499,20 +499,30 @@ export default function App() {
 
   // --- PEMBATASAN VERSI DEMO ---
   const checkDemoLimit = (actionType) => {
+    const waPromo = (
+      <div className="mt-4 p-3 bg-green-50 border border-green-100 rounded-xl text-green-800 text-xs">
+        <span className="font-bold block mb-1">✨ Upgrade ke Versi Full!</span>
+        Dapatkan akses aplikasi tanpa batas dengan menghubungi WhatsApp kami di: <br/>
+        <a href="https://wa.me/6285341503151" target="_blank" rel="noopener noreferrer" className="inline-flex items-center mt-2 font-bold text-green-700 bg-green-200/50 px-3 py-1.5 rounded-lg hover:bg-green-200 transition-colors">
+          <Phone size={12} className="mr-1.5" /> 0853-4150-3151
+        </a>
+      </div>
+    );
+
     if (actionType === 'property') {
-      showMessage('Versi Demo Terbatas', 'Fitur tambah area (properti) baru dinonaktifkan pada versi demo ini.', 'warning');
+      showMessage('Versi Demo Terbatas', <div>Fitur tambah area (properti) baru dinonaktifkan pada versi demo ini. {waPromo}</div>, 'warning');
       return true;
     }
     if (actionType === 'room' && allRooms.length >= 4) {
-      showMessage('Batas Versi Demo', 'Anda hanya dapat menambahkan maksimal 4 unit kamar pada versi demo.', 'warning');
+      showMessage('Batas Versi Demo', <div>Anda hanya dapat menambahkan maksimal 4 unit kamar pada versi demo. {waPromo}</div>, 'warning');
       return true;
     }
     if (actionType === 'tenant' && allTenants.length >= 3) {
-      showMessage('Batas Versi Demo', 'Anda hanya dapat mendaftarkan maksimal 3 penghuni pada versi demo.', 'warning');
+      showMessage('Batas Versi Demo', <div>Anda hanya dapat mendaftarkan maksimal 3 penghuni pada versi demo. {waPromo}</div>, 'warning');
       return true;
     }
     if (actionType === 'settings') {
-      showMessage('Versi Demo Terbatas', 'Fitur perubahan pengaturan akun dan tampilan web dinonaktifkan pada versi demo ini agar tidak mengganggu pengguna lain.', 'warning');
+      showMessage('Versi Demo Terbatas', <div>Fitur perubahan pengaturan akun dan tampilan web dinonaktifkan pada versi demo ini agar tidak mengganggu pengguna lain. {waPromo}</div>, 'warning');
       return true;
     }
     return false;
