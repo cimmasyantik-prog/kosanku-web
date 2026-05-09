@@ -4,12 +4,65 @@ import {
   MoreVertical, CheckCircle2, XCircle, AlertCircle, Menu, X, Phone, 
   Calendar, MapPin, ChevronDown, Download, MessageCircle, Upload, Clock, 
   Building, LogOut, AlertTriangle, User, Trash2, Printer, Edit, FileText, 
-  Wifi, ShieldCheck, Car, Star, ArrowRight, Loader2, RefreshCw, Info, Image as ImageIcon
+  Wifi, ShieldCheck, Car, Star, ArrowRight, ArrowLeft, Loader2, RefreshCw, Info, Image as ImageIcon, WifiOff, Smartphone
 } from 'lucide-react';
 
 // --- HELPER FORMATTER ---
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number || 0);
 const getCurrentMonthYear = () => { const d = new Date(); return `${d.toLocaleString('id-ID', { month: 'long' })} ${d.getFullYear()}`; };
+
+// --- PWA SETUP (DINAMIS) ---
+const setupPWA = () => {
+  if (typeof window === 'undefined') return;
+  
+  // 1. Injeksi Web Manifest
+  if (!document.querySelector('link[rel="manifest"]')) {
+    const manifest = {
+      name: "Kosanku Super App",
+      short_name: "Kosanku",
+      description: "Aplikasi Manajemen Kos Terbaik",
+      start_url: window.location.href,
+      display: "standalone",
+      background_color: "#f8fafc",
+      theme_color: "#4f46e5",
+      icons: [{ src: "https://cdn-icons-png.flaticon.com/512/25/25694.png", sizes: "512x512", type: "image/png" }]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = URL.createObjectURL(blob);
+    document.head.appendChild(link);
+  }
+
+  // 2. Injeksi Service Worker untuk Cache Offline
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const swCode = `
+        const CACHE_NAME = 'kosanku-cache-v1';
+        self.addEventListener('install', e => self.skipWaiting());
+        self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+        self.addEventListener('fetch', e => {
+          if (e.request.method !== 'GET' || e.request.url.includes('script.google.com')) return;
+          e.respondWith(
+            caches.match(e.request).then(cached => {
+              const networked = fetch(e.request).then(res => {
+                if (res && res.status === 200) {
+                  const clone = res.clone();
+                  caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+                }
+                return res;
+              }).catch(() => {});
+              return cached || networked;
+            })
+          );
+        });
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+    });
+  }
+};
+setupPWA(); // Jalankan setup saat file dimuat
 
 // --- KONFIGURASI API GOOGLE SHEETS ---
 // GANTI TULISAN DI BAWAH INI DENGAN URL GOOGLE APPS SCRIPT ANDA
@@ -45,7 +98,7 @@ const DEFAULT_SETTINGS = {
 
 // --- KOMPONEN TERPISAH (Agar tidak unmount saat App re-render) ---
 const SidebarItem = ({ icon: Icon, label, viewId, currentView, setCurrentView, setIsSidebarOpen }) => (
-  <button onClick={() => { setCurrentView(viewId); if (window.innerWidth < 768) setIsSidebarOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${currentView === viewId ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'text-gray-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
+  <button onClick={() => { setCurrentView(viewId); if (window.innerWidth < 768) setIsSidebarOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 active:scale-[0.98] ${currentView === viewId ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 translate-x-1' : 'text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:translate-x-1'}`}>
     <Icon size={20} className={currentView === viewId ? 'text-indigo-100' : 'text-gray-400'} />
     <span className="font-medium text-sm">{label}</span>
   </button>
@@ -147,7 +200,7 @@ const AdminSettings = ({ allAdmins, siteSettings, sendDataToSheets, showMessage,
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 max-w-2xl mx-auto pb-10">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out max-w-2xl mx-auto pb-10">
       <div><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Pengaturan Akun</h2></div>
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100/60 p-6 sm:p-8">
         <form onSubmit={handleSaveSettings} className="space-y-5">
@@ -263,6 +316,11 @@ export default function App() {
   const [reportText, setReportText] = useState('');
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
   const [broadcastText, setBroadcastText] = useState('');
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  // PWA & Network States
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // Forms
   const [newTenantData, setNewTenantData] = useState({ name: '', phone: '', emergencyContact: '', roomId: '' });
@@ -289,6 +347,30 @@ export default function App() {
   useEffect(() => {
     myTransactionsRef.current = myTransactions;
   }, [myTransactions]);
+
+  useEffect(() => {
+    // Listener untuk Status Jaringan & Install PWA Prompt
+    const handleBeforeInstall = (e) => { e.preventDefault(); setDeferredPrompt(e); };
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleInstallApp = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(() => setDeferredPrompt(null));
+    }
+  };
 
   useEffect(() => {
     let intervalId;
@@ -515,6 +597,7 @@ export default function App() {
 
   const handleLogout = () => { 
     setUserRole(null); setShowLandingPage(true); setUsernameInput(''); setPasswordInput(''); setTenantNotifs([]); 
+    setIsLogoutModalOpen(false);
   };
   
   const scrollToSection = (e, sectionId) => {
@@ -750,8 +833,8 @@ export default function App() {
 
     if (showLandingPage) {
       return (
-        <div className="min-h-screen w-full overflow-x-hidden bg-gray-50 font-sans text-gray-800 scroll-smooth relative">
-          {isSimulationMode && <div className="bg-red-500 text-white p-3 text-center text-xs sm:text-sm font-bold w-full sticky top-0 z-[60] shadow-md">⚠️ Mode Simulasi Aktif: Gagal terhubung ke API. Pastikan Anda telah memasukkan URL Google Apps Script yang valid.</div>}
+        <div className="min-h-screen w-full overflow-x-hidden bg-gray-50 font-sans text-gray-800 scroll-smooth relative animate-in fade-in duration-700">
+          {isSimulationMode && <div className="bg-red-500 text-white p-3 text-center text-xs sm:text-sm font-bold w-full sticky top-0 z-[60] shadow-md animate-in slide-in-from-top-full duration-500">⚠️ Mode Simulasi Aktif: Gagal terhubung ke API. Pastikan Anda telah memasukkan URL Google Apps Script yang valid.</div>}
           <nav className="bg-white/80 backdrop-blur-lg border-b border-gray-100 sticky top-0 z-50 w-full transition-all">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div className="flex justify-between h-16 sm:h-20 items-center">
               <div className="flex items-center space-x-3 cursor-pointer" onClick={(e) => scrollToSection(e, 'beranda')}>
@@ -763,7 +846,14 @@ export default function App() {
                 <a href="#fasilitas" onClick={(e) => scrollToSection(e, 'fasilitas')} className="hover:text-indigo-600 transition">Fasilitas</a>
                 <a href="#galeri" onClick={(e) => scrollToSection(e, 'galeri')} className="hover:text-indigo-600 transition">Galeri</a>
               </div>
-              <div><button onClick={() => setShowLandingPage(false)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold shadow-md hover:scale-105 transition-all flex items-center">Masuk <span className="hidden sm:inline ml-1">Aplikasi</span> <ArrowRight size={16} className="ml-2" /></button></div>
+              <div className="flex items-center">
+                {deferredPrompt && (
+                  <button onClick={handleInstallApp} className="hidden md:flex bg-white text-indigo-600 border border-indigo-100 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold shadow-sm hover:-translate-y-0.5 active:scale-95 transition-all duration-300 items-center mr-3">
+                    <Smartphone size={16} className="mr-1.5"/> Install App
+                  </button>
+                )}
+                <button onClick={() => setShowLandingPage(false)} className="group bg-indigo-600 text-white px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center">Masuk <span className="hidden sm:inline ml-1">Aplikasi</span> <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform duration-300" /></button>
+              </div>
             </div></div>
           </nav>
 
@@ -821,12 +911,12 @@ export default function App() {
 
     if (!userRole) {
       return (
-        <div className="min-h-[100dvh] w-full overflow-x-hidden bg-gray-50 flex flex-col items-center justify-center p-4 relative">
-          <button onClick={() => setShowLandingPage(true)} className="absolute top-4 left-4 sm:top-6 sm:left-6 text-gray-500 hover:text-indigo-600 flex items-center text-xs sm:text-sm font-bold transition bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 z-40 mt-12 sm:mt-0"><X size={16} className="mr-1.5" /> Kembali</button>
-          <div className="bg-white p-6 sm:p-10 rounded-[2rem] shadow-xl border border-gray-100/60 max-w-md w-full animate-in zoom-in-95 duration-500 mt-20 sm:mt-10">
+        <div className="min-h-[100dvh] w-full overflow-x-hidden bg-gray-50 flex flex-col items-center justify-center p-4 relative animate-in fade-in duration-500">
+          <button onClick={() => setShowLandingPage(true)} className="group absolute top-4 left-4 sm:top-6 sm:left-6 text-gray-500 hover:text-indigo-600 flex items-center text-xs sm:text-sm font-bold transition-all duration-300 bg-white px-4 py-2 rounded-xl shadow-sm hover:shadow-md active:scale-95 border border-gray-100 z-40 mt-12 sm:mt-0"><ArrowLeft size={16} className="mr-1.5 group-hover:-translate-x-1 transition-transform" /> Kembali</button>
+          <div className="bg-white p-6 sm:p-10 rounded-[2rem] shadow-xl border border-gray-100/60 max-w-md w-full animate-in slide-in-from-bottom-8 fade-in zoom-in-95 duration-700 ease-out mt-20 sm:mt-10">
             <div className="flex justify-center mb-6">{siteSettings.appLogo ? <img src={siteSettings.appLogo} className="w-16 h-16 rounded-2xl object-cover bg-white shadow-lg shadow-indigo-200/50" /> : <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200/50"><Home size={32} className="text-white" /></div>}</div>
             <h1 className="text-2xl font-extrabold text-center text-gray-800 mb-6">Masuk {siteSettings.appName || 'Kosanku'}</h1>
-            <div className="flex mb-6 bg-gray-50 p-1.5 rounded-2xl border border-gray-100"><button onClick={() => {setLoginRole('tenant'); setLoginError('');}} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition ${loginRole === 'tenant' ? 'bg-white text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Penyewa</button><button onClick={() => {setLoginRole('owner'); setLoginError('');}} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition ${loginRole === 'owner' ? 'bg-white text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Pengelola</button></div>
+            <div className="flex mb-6 bg-gray-50 p-1.5 rounded-2xl border border-gray-100"><button onClick={() => {setLoginRole('tenant'); setLoginError('');}} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 active:scale-95 ${loginRole === 'tenant' ? 'bg-white text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Penyewa</button><button onClick={() => {setLoginRole('owner'); setLoginError('');}} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-300 active:scale-95 ${loginRole === 'owner' ? 'bg-white text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500 hover:text-gray-700'}`}>Pengelola</button></div>
             <form onSubmit={handleLogin} className="space-y-4">
               {loginError && <p className="text-red-600 text-xs sm:text-sm bg-red-50 p-3 rounded-xl text-center font-bold border border-red-100 animate-in slide-in-from-top-2">{loginError}</p>}
               
@@ -836,10 +926,10 @@ export default function App() {
                 </div>
               )}
 
-              {loginRole === 'tenant' && (<div><label className="text-sm font-bold text-gray-700 block mb-2">Pilih Area Kos</label><select value={loginPropertyId} onChange={(e) => setLoginPropertyId(e.target.value)} required className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 bg-white"><option value="">-- Pilih Area --</option>{properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>)}
-              <div><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Nama Lengkap Penyewa' : 'Username Admin'}</label><input type="text" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: Budi Santoso' : 'Masukkan username...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500"/></div>
-              <div><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Kata Sandi (Nomor Kamar)' : 'Kata Sandi'}</label><input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: 101' : 'Masukkan kata sandi...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500"/></div>
-              <button type="submit" className="w-full bg-indigo-600 text-white hover:bg-indigo-700 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200/50 hover:scale-[1.02] transition-all mt-4">Masuk Sekarang</button>
+              {loginRole === 'tenant' && (<div className="animate-in fade-in duration-300"><label className="text-sm font-bold text-gray-700 block mb-2">Pilih Area Kos</label><select value={loginPropertyId} onChange={(e) => setLoginPropertyId(e.target.value)} required className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all bg-white"><option value="">-- Pilih Area --</option>{properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>)}
+              <div className="animate-in fade-in duration-500"><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Nama Lengkap Penyewa' : 'Username Admin'}</label><input type="text" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: Budi Santoso' : 'Masukkan username...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"/></div>
+              <div className="animate-in fade-in duration-700"><label className="text-sm font-bold text-gray-700 block mb-2">{loginRole === 'tenant' ? 'Kata Sandi (Nomor Kamar)' : 'Kata Sandi'}</label><input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} required placeholder={loginRole === 'tenant' ? 'Contoh: 101' : 'Masukkan kata sandi...'} className="w-full border border-gray-200 rounded-2xl px-4 py-3.5 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"/></div>
+              <button type="submit" className="w-full bg-indigo-600 text-white hover:bg-indigo-700 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200/50 hover:-translate-y-1 active:scale-95 transition-all duration-300 mt-4">Masuk Sekarang</button>
             </form>
           </div>
         </div>
@@ -883,26 +973,39 @@ export default function App() {
             )}
           </nav>
           <div className="p-4 border-t border-gray-50/80 bg-gray-50/30">
+            {deferredPrompt && (
+              <button onClick={handleInstallApp} className="w-full mb-3 flex items-center justify-center bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-2.5 rounded-xl text-sm font-bold shadow-md hover:-translate-y-0.5 active:scale-95 transition-all duration-300">
+                <Smartphone size={16} className="mr-2"/> Install Aplikasi
+              </button>
+            )}
             <div className="flex items-center justify-between px-2 py-2">
               <div className="flex items-center space-x-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm ${isOwner ? 'bg-indigo-600' : 'bg-purple-600'}`}>{isOwner ? 'A' : 'T'}</div><div><p className="text-sm font-bold text-gray-800 line-clamp-1">{isOwner ? (allAdmins[0]?.username || 'Admin') : myTenantProfile?.name}</p><p className="text-xs text-gray-500 font-medium">{isOwner ? 'Pemilik Kos' : `Kamar ${myRoom?.number}`}</p></div></div>
-              <button onClick={handleLogout} className="p-2.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl transition"><LogOut size={16} /></button>
+              <button onClick={() => setIsLogoutModalOpen(true)} className="p-2.5 text-red-500 bg-red-50 hover:bg-red-100 active:scale-95 rounded-xl transition-all duration-300" title="Keluar"><LogOut size={16} /></button>
             </div>
           </div>
         </aside>
 
         <main className="flex-1 flex flex-col min-h-[100dvh] max-w-full overflow-hidden w-full relative">
           <header className="h-[68px] sm:h-[76px] bg-white/80 backdrop-blur-md border-b border-gray-100/80 flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-30 w-full transition-all">
-            <div className="flex items-center"><button className="md:hidden mr-3 sm:mr-4 text-gray-600 hover:text-indigo-600 bg-gray-100/50 p-2.5 rounded-xl transition" onClick={() => setIsSidebarOpen(true)}><Menu size={20} /></button><h1 className="text-base sm:text-xl font-extrabold text-gray-800 capitalize truncate max-w-[160px] sm:max-w-[300px]">{currentView}</h1></div>
+            <div className="flex items-center">
+              <button className="md:hidden mr-3 sm:mr-4 text-gray-600 hover:text-indigo-600 bg-gray-100/50 p-2.5 rounded-xl transition" onClick={() => setIsSidebarOpen(true)}><Menu size={20} /></button>
+              {currentView !== 'dashboard' && (
+                <button onClick={() => setCurrentView('dashboard')} className="mr-3 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 p-2 rounded-xl transition flex items-center justify-center" title="Kembali ke Dashboard">
+                  <ArrowLeft size={20} />
+                </button>
+              )}
+              <h1 className="text-base sm:text-xl font-extrabold text-gray-800 capitalize truncate max-w-[160px] sm:max-w-[300px]">{currentView}</h1>
+            </div>
             <div className="flex items-center space-x-2.5 md:space-x-4">
               <button onClick={() => fetchGoogleSheetsData(false, true)} className={`p-2.5 transition rounded-xl ${isSyncing ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400 hover:text-indigo-600 hover:bg-gray-100'}`}><RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} /></button>
               
               {isOwner && (
-                <button onClick={() => setIsBroadcastModalOpen(true)} className="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center shadow-sm hover:bg-indigo-100 transition">
+                <button onClick={() => setIsBroadcastModalOpen(true)} className="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center shadow-sm hover:bg-indigo-100 active:scale-95 transition-all duration-300">
                   <MessageCircle size={16} className="md:mr-2" /> <span className="hidden md:inline">Pengumuman</span>
                 </button>
               )}
               {isTenant && (
-                <button onClick={() => setReportModalOpen(true)} className="bg-red-50 text-red-600 border border-red-100 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center shadow-sm hover:bg-red-100 transition">
+                <button onClick={() => setReportModalOpen(true)} className="bg-red-50 text-red-600 border border-red-100 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center shadow-sm hover:bg-red-100 active:scale-95 transition-all duration-300">
                   <AlertTriangle size={16} className="md:mr-2" /> <span className="hidden md:inline">Lapor Kendala</span>
                 </button>
               )}
@@ -954,27 +1057,27 @@ export default function App() {
           
           <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto w-full pb-28 sm:pb-8">
             {currentView === 'dashboard' && (isOwner ? (
-              <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
+              <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-gray-100/60 flex flex-col justify-between"><div className="flex items-center justify-between mb-3"><h3 className="text-gray-500 text-xs sm:text-sm font-medium">Penghuni</h3><div className="p-1.5 sm:p-2 bg-blue-50 rounded-xl"><Users size={18} className="text-blue-500" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.totalTenants}</div><p className="text-[10px] sm:text-xs text-gray-400 mt-1 font-medium">Orang Aktif</p></div></div>
-                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-gray-100/60 flex flex-col justify-between"><div className="flex items-center justify-between mb-3"><h3 className="text-gray-500 text-xs sm:text-sm font-medium">Kamar Isi</h3><div className="p-1.5 sm:p-2 bg-indigo-50 rounded-xl"><Building size={18} className="text-indigo-500" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.occupiedRooms} <span className="text-sm sm:text-lg text-gray-400">/ {stats.totalRooms}</span></div><p className="text-[10px] sm:text-xs text-indigo-500 mt-1 font-bold">{stats.totalRooms ? Math.round((stats.occupiedRooms / stats.totalRooms) * 100) : 0}% Terisi</p></div></div>
-                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-yellow-100 flex flex-col justify-between cursor-pointer hover:bg-yellow-50/50 transition" onClick={()=>setCurrentView('finance')}><div className="flex items-center justify-between mb-3"><h3 className="text-yellow-700 text-xs sm:text-sm font-bold">Verifikasi</h3><div className="p-1.5 sm:p-2 bg-yellow-100 rounded-xl"><Clock size={18} className="text-yellow-600" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.pendingCount}</div><p className="text-[10px] sm:text-xs text-yellow-600 mt-1 font-medium">Butuh dicek</p></div></div>
-                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-red-100 flex flex-col justify-between cursor-pointer hover:bg-red-50/50 transition" onClick={()=>setCurrentView('finance')}><div className="flex items-center justify-between mb-3"><h3 className="text-red-700 text-xs sm:text-sm font-bold">Tertunda</h3><div className="p-1.5 sm:p-2 bg-red-100 rounded-xl"><AlertCircle size={18} className="text-red-600" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.unpaidCount}</div><p className="text-[10px] sm:text-xs text-red-500 mt-1 font-medium">Belum bayar</p></div></div>
+                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-gray-100/60 flex flex-col justify-between hover:-translate-y-1 hover:shadow-md transition-all duration-300"><div className="flex items-center justify-between mb-3"><h3 className="text-gray-500 text-xs sm:text-sm font-medium">Penghuni</h3><div className="p-1.5 sm:p-2 bg-blue-50 rounded-xl"><Users size={18} className="text-blue-500" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.totalTenants}</div><p className="text-[10px] sm:text-xs text-gray-400 mt-1 font-medium">Orang Aktif</p></div></div>
+                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-gray-100/60 flex flex-col justify-between hover:-translate-y-1 hover:shadow-md transition-all duration-300"><div className="flex items-center justify-between mb-3"><h3 className="text-gray-500 text-xs sm:text-sm font-medium">Kamar Isi</h3><div className="p-1.5 sm:p-2 bg-indigo-50 rounded-xl"><Building size={18} className="text-indigo-500" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.occupiedRooms} <span className="text-sm sm:text-lg text-gray-400">/ {stats.totalRooms}</span></div><p className="text-[10px] sm:text-xs text-indigo-500 mt-1 font-bold">{stats.totalRooms ? Math.round((stats.occupiedRooms / stats.totalRooms) * 100) : 0}% Terisi</p></div></div>
+                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-yellow-100 flex flex-col justify-between cursor-pointer hover:bg-yellow-50 hover:-translate-y-1 hover:shadow-md transition-all duration-300" onClick={()=>setCurrentView('finance')}><div className="flex items-center justify-between mb-3"><h3 className="text-yellow-700 text-xs sm:text-sm font-bold">Verifikasi</h3><div className="p-1.5 sm:p-2 bg-yellow-100 rounded-xl"><Clock size={18} className="text-yellow-600" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.pendingCount}</div><p className="text-[10px] sm:text-xs text-yellow-600 mt-1 font-medium">Butuh dicek</p></div></div>
+                  <div className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-red-100 flex flex-col justify-between cursor-pointer hover:bg-red-50 hover:-translate-y-1 hover:shadow-md transition-all duration-300" onClick={()=>setCurrentView('finance')}><div className="flex items-center justify-between mb-3"><h3 className="text-red-700 text-xs sm:text-sm font-bold">Tertunda</h3><div className="p-1.5 sm:p-2 bg-red-100 rounded-xl"><AlertCircle size={18} className="text-red-600" /></div></div><div><div className="text-xl sm:text-3xl font-extrabold text-gray-800">{stats.unpaidCount}</div><p className="text-[10px] sm:text-xs text-red-500 mt-1 font-medium">Belum bayar</p></div></div>
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-                <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-6 sm:p-8 text-white shadow-lg shadow-indigo-200/50 relative overflow-hidden">
+              <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
+                <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-6 sm:p-8 text-white shadow-lg shadow-indigo-200/50 relative overflow-hidden group">
                   <div className="relative z-10"><h2 className="text-2xl sm:text-3xl font-extrabold mb-1">Halo, {myTenantProfile?.name}! 👋</h2><p className="text-indigo-100 mb-6 flex items-center text-sm sm:text-base font-medium"><MapPin size={16} className="mr-1.5 opacity-80"/> Kamar {myRoom?.number} • {properties.find(p=>String(p.id) === String(myRoom?.propertyId))?.name}</p><div className="flex flex-col sm:flex-row gap-3"><button onClick={() => setCurrentView('finance')} className="bg-white text-indigo-600 px-5 py-3 rounded-2xl text-sm font-bold shadow-sm hover:bg-indigo-50 transition w-full sm:w-auto text-center">Lihat Tagihan Saya</button><button onClick={() => setReportModalOpen(true)} className="bg-red-500/20 backdrop-blur-md border border-red-400/30 text-white px-5 py-3 rounded-2xl text-sm font-bold shadow-sm hover:bg-red-500/40 transition flex items-center justify-center w-full sm:w-auto"><AlertTriangle size={16} className="mr-2" /> Lapor Kendala</button></div></div>
-                  <BedDouble size={140} className="absolute -bottom-8 -right-8 text-white opacity-10 rotate-12" />
+                  <BedDouble size={140} className="absolute -bottom-8 -right-8 text-white opacity-10 group-hover:scale-110 group-hover:-rotate-12 transition-transform duration-700" />
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                  <div className="bg-white rounded-3xl shadow-sm border border-gray-100/60 p-5 sm:p-6"><h3 className="font-bold text-gray-800 mb-5 flex items-center text-base sm:text-lg"><Home size={20} className="mr-2 text-indigo-500"/> Info Kamar Saya</h3><div className="space-y-4"><div className="flex justify-between items-center py-2 border-b border-gray-50"><span className="text-gray-500 text-sm">Tipe Unit</span><span className="font-bold text-gray-800 text-sm bg-gray-50 px-3 py-1 rounded-lg">{myRoom?.type}</span></div><div className="flex justify-between items-center py-2 border-b border-gray-50"><span className="text-gray-500 text-sm">Biaya Bulanan</span><span className="font-bold text-gray-800 text-sm">{formatRupiah(myRoom?.price)}</span></div><div className="pt-2"><span className="text-gray-500 text-sm block mb-3">Fasilitas:</span><div className="flex flex-wrap gap-2">{(Array.isArray(myRoom?.facilities)?myRoom.facilities:[]).map((fac, idx)=>(<span key={idx} className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-medium">{fac}</span>))}</div></div></div></div>
+                  <div className="bg-white rounded-3xl shadow-sm border border-gray-100/60 p-5 sm:p-6"><h3 className="font-bold text-gray-800 mb-5 flex items-center text-base sm:text-lg"><Home size={20} className="mr-2 text-indigo-500"/> Info Kamar Saya</h3><div className="space-y-4"><div className="flex justify-between items-center py-2 border-b border-gray-50"><span className="text-gray-500 text-sm">Tipe Unit</span><span className="font-bold text-gray-800 text-sm bg-gray-50 px-3 py-1 rounded-lg">{myRoom?.type}</span></div><div className="flex justify-between items-center py-2 border-b border-gray-50"><span className="text-gray-500 text-sm">Biaya Bulanan</span><span className="font-bold text-gray-800 text-sm">{formatRupiah(myRoom?.price)}</span></div><div className="pt-2"><span className="text-gray-500 text-sm block mb-3">Fasilitas:</span><div className="flex flex-wrap gap-2">{(Array.isArray(myRoom?.facilities)?myRoom.facilities:[]).map((fac, idx)=>(<span key={idx} className="bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-medium hover:scale-105 transition-transform cursor-default">{fac}</span>))}</div></div></div></div>
                 </div>
               </div>
             ))}
             {currentView === 'finance' && (
-              <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Laporan Keuangan</h2><p className="text-xs sm:text-sm text-gray-500 mt-1">{isOwner ? 'Pemantauan transaksi seluruh area kos' : 'Pemantauan tagihan Anda'}</p></div>
                   <div className="flex flex-wrap w-full sm:w-auto gap-2">
@@ -1081,7 +1184,7 @@ export default function App() {
               </div>
             )}
             {isOwner && currentView === 'rooms' && (
-              <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Unit Kamar</h2><p className="text-xs sm:text-sm text-gray-500 flex items-center mt-1"><MapPin size={14} className="mr-1 opacity-70"/> {selectedPropertyDetails?.address}</p></div>
                   <div className="flex w-full sm:w-auto gap-2"><button onClick={openEditPropertyModal} className="flex-1 sm:flex-none bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-2xl text-sm font-bold hover:bg-gray-50 transition flex items-center justify-center space-x-2"><Settings size={16} /> <span className="hidden sm:inline">Edit Area</span></button><button onClick={()=>setIsAddRoomModalOpen(true)} className="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2.5 rounded-2xl text-sm font-bold hover:bg-indigo-700 transition flex items-center justify-center space-x-2 shadow-md shadow-indigo-200/50"><Plus size={18} /> <span>Tambah Unit</span></button></div>
@@ -1093,8 +1196,8 @@ export default function App() {
               </div>
             )}
             {isOwner && currentView === 'tenants' && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Daftar Penghuni</h2><div className="flex w-full sm:w-auto space-x-2"><div className="relative flex-1 sm:w-64"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} /><input type="text" value={tenantSearch} onChange={(e) => setTenantSearch(e.target.value)} placeholder="Cari penghuni..." className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-2xl text-base sm:text-sm focus:outline-none focus:border-indigo-500 bg-white" /></div><button onClick={()=>setIsAddTenantModalOpen(true)} className="text-white bg-indigo-600 px-4 py-2.5 rounded-2xl text-sm font-bold transition flex items-center justify-center shadow-md"><Plus size={18} /> <span className="hidden sm:inline ml-2">Tambah</span></button></div></div>
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"><h2 className="text-xl sm:text-2xl font-bold text-gray-800">Daftar Penghuni</h2><div className="flex w-full sm:w-auto space-x-2"><div className="relative flex-1 sm:w-64"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 transition-all" size={18} /><input type="text" value={tenantSearch} onChange={(e) => setTenantSearch(e.target.value)} placeholder="Cari penghuni..." className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-2xl text-base sm:text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all bg-white" /></div><button onClick={()=>setIsAddTenantModalOpen(true)} className="text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 px-4 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center shadow-md"><Plus size={18} /> <span className="hidden sm:inline ml-2">Tambah</span></button></div></div>
                 <div className="bg-white rounded-3xl shadow-sm border border-gray-100/60 overflow-hidden"><div className="overflow-x-auto hide-scroll-mobile custom-scrollbar"><table className="w-full text-left border-collapse"><thead className="bg-gray-50/50"><tr className="border-b border-gray-100"><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Nama Penghuni</th><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Unit</th><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Kontak</th><th className="p-4 sm:p-5 text-xs font-semibold text-gray-500 uppercase text-right whitespace-nowrap">Aksi</th></tr></thead><tbody className="divide-y divide-gray-50">{tenants.filter(t => String(t.name).toLowerCase().includes(String(tenantSearch).toLowerCase())).map(tenant => {const room = rooms.find(r => String(r.id) === String(tenant.roomId)); return (<tr key={tenant.id} className="hover:bg-gray-50/30 transition"><td className="p-4 sm:p-5 whitespace-nowrap"><div className="flex items-center space-x-3"><div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-100 to-purple-100 text-indigo-600 flex items-center justify-center font-bold">{String(tenant.name).charAt(0)}</div><div><p className="text-sm font-bold text-gray-800">{tenant.name}</p><p className="text-xs text-gray-400 mt-0.5">ID: KSN-{tenant.id}</p></div></div></td><td className="p-4 sm:p-5 whitespace-nowrap"><span className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 text-gray-700">{room ? `Unit ${room.number}` : '-'}</span></td><td className="p-4 sm:p-5 whitespace-nowrap"><div className="flex flex-col space-y-1.5"><span className="text-sm text-gray-700 flex items-center font-medium"><Phone size={14} className="mr-2 text-gray-400"/> {tenant.phone}</span><span className="text-xs text-red-500 flex items-center font-medium"><AlertCircle size={14} className="mr-2"/> Darurat: {tenant.emergencyContact}</span></div></td><td className="p-4 sm:p-5 text-right whitespace-nowrap"><button onClick={()=>handleCheckoutTenant(tenant.id, tenant.roomId, tenant.name)} className="text-red-600 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100 text-xs font-bold transition border border-red-100">Keluarkan</button></td></tr>)})}</tbody></table></div></div>
               </div>
             )}
@@ -1108,6 +1211,12 @@ export default function App() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+        body, html, .font-sans { 
+          font-family: 'Inter', sans-serif !important; 
+        }
+
         .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; } 
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } 
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; } 
@@ -1131,6 +1240,12 @@ export default function App() {
       `}</style>
       
       <div className="print:hidden">
+        {!isOnline && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] bg-slate-900/90 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center text-sm font-bold animate-in slide-in-from-bottom-8 duration-500 whitespace-nowrap border border-slate-700">
+            <WifiOff size={18} className="text-red-400 mr-2 animate-pulse" /> Offline. Menggunakan data tersimpan.
+          </div>
+        )}
+        
         {renderContent()}
         
         {/* MODAL GLOBAL SCREEN VERSION */}
@@ -1196,6 +1311,24 @@ export default function App() {
         {isAddPropertyModalOpen && (<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-[2rem] shadow-2xl w-[calc(100%-1rem)] sm:w-full max-w-md overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[85vh] sm:max-h-[90vh]"><div className="p-5 sm:p-6 border-b border-green-100 flex justify-between items-center bg-green-50/50 flex-shrink-0"><h3 className="font-extrabold text-lg text-green-700 flex items-center"><MapPin size={20} className="mr-2"/> Tambah Area Baru</h3><button onClick={() => setIsAddPropertyModalOpen(false)} className="text-green-500 hover:bg-green-100 p-1.5 rounded-lg transition"><X size={20}/></button></div><form onSubmit={handleAddProperty} className="flex flex-col flex-1 min-h-0"><div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar"><div><label className="text-sm font-bold text-gray-700 block mb-2">Nama Area</label><input type="text" required value={newPropertyData.name} onChange={(e)=>setNewPropertyData({...newPropertyData, name: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:border-green-500"/></div><div><label className="text-sm font-bold text-gray-700 block mb-2">Alamat</label><textarea required value={newPropertyData.address} onChange={(e)=>setNewPropertyData({...newPropertyData, address: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:border-green-500"></textarea></div><div><label className="text-sm font-bold text-gray-700 block mb-2">Penanggung Jawab</label><input type="text" required value={newPropertyData.manager} onChange={(e)=>setNewPropertyData({...newPropertyData, manager: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:border-green-500"/></div></div><div className="p-4 sm:p-5 bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 flex-shrink-0 border-t border-gray-100"><button type="button" onClick={() => setIsAddPropertyModalOpen(false)} className="w-full sm:w-auto px-5 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50">Batal</button><button type="submit" className="w-full sm:w-auto px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-2xl text-sm font-bold shadow-md transition">Simpan Area</button></div></form></div></div>)}
         {editPropertyModalOpen && (<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-[2rem] shadow-2xl w-[calc(100%-1rem)] sm:w-full max-w-md overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[85vh] sm:max-h-[90vh]"><div className="p-5 sm:p-6 border-b border-indigo-100 flex justify-between items-center bg-indigo-50/50 flex-shrink-0"><h3 className="font-extrabold text-lg text-indigo-700 flex items-center"><Settings size={20} className="mr-2"/> Edit Data Area</h3><button onClick={() => setEditPropertyModalOpen(false)} className="text-indigo-400 hover:bg-indigo-100 p-1.5 rounded-lg transition"><X size={20}/></button></div><form onSubmit={handleSavePropertyEdit} className="flex flex-col flex-1 min-h-0"><div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar"><div><label className="text-sm font-bold text-gray-700 block mb-2">Nama Area</label><input type="text" required value={editPropertyData.name} onChange={(e)=>setEditPropertyData({...editPropertyData, name: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500"/></div><div><label className="text-sm font-bold text-gray-700 block mb-2">Alamat</label><textarea required value={editPropertyData.address} onChange={(e)=>setEditPropertyData({...editPropertyData, address: e.target.value})} className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:border-indigo-500"></textarea></div></div><div className="p-4 sm:p-5 bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 flex-shrink-0 border-t border-gray-100"><button type="button" onClick={() => setEditPropertyModalOpen(false)} className="w-full sm:w-auto px-5 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50">Batal</button><button type="submit" className="w-full sm:w-auto px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md transition">Simpan Perubahan</button></div></form></div></div>)}
         {isWaModalOpen && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"><div className="bg-white rounded-[2rem] shadow-2xl w-[calc(100%-1rem)] sm:w-full max-w-sm overflow-hidden animate-in zoom-in-95 flex flex-col"><div className="p-5 sm:p-6 border-b border-green-100 flex justify-between items-center bg-green-50/50 flex-shrink-0"><h3 className="font-extrabold text-lg text-green-700 flex items-center"><MessageCircle size={20} className="mr-2"/> Hubungi Kami</h3><button onClick={() => setIsWaModalOpen(false)} className="text-green-500 hover:bg-green-100 p-1.5 rounded-lg transition"><X size={20}/></button></div><form onSubmit={handleSendWaInquiry} className="flex flex-col flex-1 min-h-0"><div className="p-5 sm:p-6 space-y-5 overflow-y-auto custom-scrollbar"><p className="text-sm text-gray-600 font-medium">Sistem akan mengarahkan Anda ke WhatsApp untuk menanyakan ketersediaan kos.</p><div><label className="text-sm font-bold text-gray-700 block mb-2">Nama Panggilan Anda</label><input type="text" required value={waNameInput} onChange={(e) => setWaNameInput(e.target.value)} placeholder="Contoh: Budi" className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-base sm:text-sm font-medium focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"/></div></div><div className="p-4 sm:p-5 bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 flex-shrink-0 border-t border-gray-100"><button type="button" onClick={() => setIsWaModalOpen(false)} className="w-full sm:w-auto px-5 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50">Batal</button><button type="submit" className="w-full sm:w-auto px-5 py-3 bg-green-500 hover:bg-green-600 text-white rounded-2xl text-sm font-bold shadow-md shadow-green-200/50 flex items-center justify-center transition"><MessageCircle size={18} className="mr-2" /> Kirim WhatsApp</button></div></form></div></div>)}
+        
+        {isLogoutModalOpen && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2rem] shadow-2xl w-[calc(100%-1rem)] sm:w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 ease-out flex flex-col">
+              <div className="p-5 sm:p-6 border-b border-red-100 flex justify-between items-center bg-red-50/50 flex-shrink-0">
+                <h3 className="font-extrabold text-lg text-red-600 flex items-center"><LogOut size={20} className="mr-2"/> Konfirmasi Keluar</h3>
+                <button onClick={() => setIsLogoutModalOpen(false)} className="text-red-400 hover:bg-red-100 p-1.5 rounded-lg transition"><X size={20}/></button>
+              </div>
+              <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar text-center">
+                <p className="text-sm text-gray-700 font-medium">Apakah Anda yakin ingin keluar dari aplikasi?</p>
+              </div>
+              <div className="p-4 sm:p-5 bg-gray-50/50 flex flex-col sm:flex-row justify-end gap-3 flex-shrink-0 border-t border-gray-100">
+                <button onClick={() => setIsLogoutModalOpen(false)} className="w-full sm:w-auto px-5 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-2xl hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleLogout} className="w-full sm:w-auto px-5 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl text-sm font-bold shadow-md shadow-red-200/50 transition">Ya, Keluar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* --- PRINT ONLY LAYOUTS --- */}
