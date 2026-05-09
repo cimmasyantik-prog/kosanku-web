@@ -17,25 +17,44 @@ const setupPWA = () => {
   
   // 1. Injeksi Web Manifest
   if (!document.querySelector('link[rel="manifest"]')) {
-    
-    // Bikin Icon Dinamis dengan Latar Belakang Solid agar tidak Hitam di HP
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    
-    // Latar belakang Indigo solid
-    ctx.fillStyle = '#4f46e5'; 
-    ctx.fillRect(0, 0, 512, 512);
-    
-    // Teks Logo "K" berwarna putih di tengah
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 300px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('K', 256, 280); // Offset Y sedikit ke bawah agar pas
+    let iconDataUrl = null;
 
-    const iconDataUrl = canvas.toDataURL('image/png');
+    // Coba baca appLogo dari cache lokal terlebih dahulu
+    try {
+      const cachedData = localStorage.getItem('kosanku_db_cache');
+      if (cachedData) {
+        const parsedData = JSON.parse(cachedData);
+        if (parsedData.settings) {
+          const logoSetting = parsedData.settings.find(s => s.key === 'appLogo');
+          if (logoSetting && logoSetting.value) {
+            iconDataUrl = logoSetting.value;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal memuat logo untuk PWA:', e);
+    }
+
+    // Jika logo aplikasi belum diatur, bikin Icon Dinamis dengan Latar Belakang Solid
+    if (!iconDataUrl) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      
+      // Latar belakang Indigo solid
+      ctx.fillStyle = '#4f46e5'; 
+      ctx.fillRect(0, 0, 512, 512);
+      
+      // Teks Logo "K" berwarna putih di tengah
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 300px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('K', 256, 280); // Offset Y sedikit ke bawah agar pas
+
+      iconDataUrl = canvas.toDataURL('image/png');
+    }
 
     const manifest = {
       name: "Kosanku Super App",
