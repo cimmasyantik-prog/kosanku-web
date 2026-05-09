@@ -372,6 +372,7 @@ export default function App() {
   // PWA & Network States
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showOnlineToast, setShowOnlineToast] = useState(false);
 
   // Forms
   const [newTenantData, setNewTenantData] = useState({ name: '', phone: '', emergencyContact: '', roomId: '' });
@@ -400,19 +401,38 @@ export default function App() {
   }, [myTransactions]);
 
   useEffect(() => {
+    let timeoutId;
     // Listener untuk Status Jaringan & Install PWA Prompt
     const handleBeforeInstall = (e) => { e.preventDefault(); setDeferredPrompt(e); };
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    
+    const handleOnline = () => {
+      setIsOnline(true);
+      setShowOnlineToast(true);
+      if(timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => setShowOnlineToast(false), 5000);
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      setShowOnlineToast(false);
+      if(timeoutId) clearTimeout(timeoutId);
+    };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Initial check saat web pertama kali dimuat
+    if (navigator.onLine) {
+      setShowOnlineToast(true);
+      timeoutId = setTimeout(() => setShowOnlineToast(false), 5000);
+    }
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      if(timeoutId) clearTimeout(timeoutId);
     };
   }, []);
 
@@ -1314,17 +1334,21 @@ export default function App() {
             overflow: visible !important;
           }
           @page { margin: 15mm; }
-          .print\\:hidden { display: none !important; }
-          .print\\:block { display: block !important; }
+          .print\:-hidden { display: none !important; }
+          .print\:block { display: block !important; }
         }
       `}</style>
       
       <div className="print:hidden">
-        {!isOnline && (
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] bg-slate-900/90 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center text-sm font-bold animate-in slide-in-from-bottom-8 duration-500 whitespace-nowrap border border-slate-700">
-            <WifiOff size={18} className="text-red-400 mr-2 animate-pulse" /> Offline. Menggunakan data tersimpan.
+        <div className={`fixed bottom-2 right-2 sm:bottom-3 sm:right-3 z-[9999] pointer-events-none transition-all duration-700 ease-in-out ${(!isOnline || showOnlineToast) ? 'opacity-70 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+          <div className="font-mono text-[10px] font-bold bg-white/80 backdrop-blur px-2 py-1 rounded shadow-sm border border-gray-100/50 text-gray-500 tracking-wider">
+            {isOnline ? (
+              <span className="text-green-500">&lt;status: terhubung/&gt;</span>
+            ) : (
+              <span className="text-red-500 animate-pulse">&lt;status: offline/&gt;</span>
+            )}
           </div>
-        )}
+        </div>
         
         {renderContent()}
         
